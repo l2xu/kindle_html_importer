@@ -1,81 +1,101 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { Plugin, Notice } from "obsidian";
+import * as cheerio from "cheerio";
+import { App, PluginSettingTab, Setting, TFolder, Modal } from "obsidian";
 
-// Remember to rename these classes and interfaces!
 
-interface MyPluginSettings {
-	mySetting: string;
+interface KindleHighlightsSettings {
+	path: string;
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+const DEFAULT_SETTINGS: KindleHighlightsSettings = {
+	path: "/",
+};
 
 export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+	settings: KindleHighlightsSettings;
 
 	async onload() {
 		await this.loadSettings();
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
 		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
+			id: "display-modal",
+			name: "Import Highlights from HTML file",
 			callback: () => {
-				new SampleModal(this.app).open();
+				new FilePickerModal(this.app, (value) => {
+					const reader = new FileReader();
+					reader.onload = () => this.handleFileLoad(reader.result);
+					reader.readAsText(value);
+				}).open();
+			},
+		});
+
+		this.addSettingTab(new KindleHighlightsSettingsTab(this.app, this));
+
+		
+	}
+
+	async handleFileLoad(fileContents: string | ArrayBuffer | null) {
+		if (!fileContents) return;
+
+		const $ = cheerio.load(fileContents as string);
+		const bookTitle = $(".bookTitle")
+			.text()
+			.trim()
+			.replace(/[\\/*<>:|?"]/g, "");
+		const author = $(".authors").text().trim();
+		author.replace(/[\\/*<>:|?"]/g, "");
+
+		let content = "";
+		let highlightsCounter = 0;
+
+		$(".noteHeading").each((index, element) => {
+			if ($(element).children("span").length !== 1) return;
+
+			const pageMatch = $(element)
+				.text()
+				.match(/(Page|Location) (\d+)/);
+			const pageNumber = pageMatch ? pageMatch[2] : null;
+			const noteText = $(element).next(".noteText").text().trim();
+
+			content += `${noteText}\n- ${pageMatch ? pageMatch[1] : ""} ${
+				pageNumber || ""
+			}\n\n`;
+
+			if (
+				$(element).next().next().children("span").length === 0 &&
+				!$(element).next().next().hasClass("sectionHeading") &&
+				$(element).next().next().length !== 0
+			) {
+				const userNote = $(element)
+					.next()
+					.next()
+					.next(".noteText")
+					.text()
+					.trim();
+				content += `>[!${userNote}] \n\n`;
 			}
+
+			content += "---\n\n";
+			highlightsCounter++;
 		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
+
+		const frontmatter = `---\nauthor: "[[${author}]]"\nhighlights: ${highlightsCounter}\n---\n`;
+
+		try {
+			await this.app.vault.create(
+				`${this.settings.path}/${bookTitle}.md`,
+				`${frontmatter}\n\n## Highlights \n\n${content}`
+			);
+			new Notice("File created");
+		} catch (error) {
+			
+			if(error.code === "ENOENT")
+			{
+				new Notice("Invalid path. Please select a valid folder in the plugin settings");
+			}else{
+				new Notice("File already exists");
 			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
+		}
 	}
 
 	onunload() {
@@ -83,31 +103,23 @@ export default class MyPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			await this.loadData()
+		);
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
 
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
 
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
+class KindleHighlightsSettingsTab extends PluginSettingTab {
 	plugin: MyPlugin;
 
 	constructor(app: App, plugin: MyPlugin) {
@@ -115,20 +127,81 @@ class SampleSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
-		const {containerEl} = this;
-
+	display():void {
+		const { containerEl } = this;
 		containerEl.empty();
+		containerEl.createEl("h1", { text: "Kindle Highlights Settings" });
+
+		const folders: string[] = this.app.vault
+			.getAllLoadedFiles()
+			.filter(
+				(file) =>
+					this.app.vault.getAbstractFileByPath(file.path) instanceof
+					TFolder
+			)
+			.map((folderFile) => folderFile.path);
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+			.setName("File path")
+			.setDesc("Select the folder where you want to save your highlights")
+			.addDropdown((dropdown) => {
+				dropdown.addOptions({
+					...folders.reduce(
+						(acc, cur) => ({ ...acc, [cur]: cur }),
+						{}
+					),
+				});
+				dropdown.setValue(this.plugin.settings.path);
+				dropdown.onChange(async (value) => {
+					this.plugin.settings.path = value;
 					await this.plugin.saveSettings();
-				}));
+				});
+			});
+		
+	}
+}
+
+
+class FilePickerModal extends Modal {
+	callback: (value: File) => void; // Add this line
+
+
+	constructor(app: App, callback: (value: File) => void){
+		super(app);
+		this.callback = callback;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+	
+		contentEl.createEl("h1", { text: "Import Highlights from HTML file" });
+		contentEl.createEl("br");
+		contentEl.createEl("p", { text: "Select your kindle html file:"});
+		const input = contentEl.createEl("input", {
+			type: "file",
+			attr: { single: "" },
+		});
+		contentEl.createEl("br");
+		contentEl.createEl("br");
+		
+	
+
+		const button = contentEl.createEl("button", {
+			text: "Import Highlights from the file",
+		});
+		button.addEventListener("click", () => {
+			const reader = new FileReader();
+
+			if (input.files) {
+				reader.readAsText(input.files[0]);	
+				this.callback(input.files[0]);	
+				this.close();
+			}
+		});
+	}
+
+	onClose() {
+		const { contentEl } = this;
+		contentEl.empty();
 	}
 }
