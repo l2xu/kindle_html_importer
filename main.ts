@@ -1,6 +1,6 @@
-import { Plugin, Notice } from "obsidian";
+import { Plugin, Notice , App, PluginSettingTab, Setting, TFolder, Modal } from "obsidian";
 import * as cheerio from "cheerio";
-import { App, PluginSettingTab, Setting, TFolder, Modal } from "obsidian";
+
 
 
 interface KindleHighlightsSettings {
@@ -11,7 +11,7 @@ const DEFAULT_SETTINGS: KindleHighlightsSettings = {
 	path: "/",
 };
 
-export default class MyPlugin extends Plugin {
+export default class KindleHighlightsPlugin extends Plugin {
 	settings: KindleHighlightsSettings;
 
 	async onload() {
@@ -117,51 +117,6 @@ export default class MyPlugin extends Plugin {
 	
 }
 
-
-
-class KindleHighlightsSettingsTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display():void {
-		const { containerEl } = this;
-		containerEl.empty();
-		containerEl.createEl("h1", { text: "Kindle Highlights Settings" });
-
-		const folders: string[] = this.app.vault
-			.getAllLoadedFiles()
-			.filter(
-				(file) =>
-					this.app.vault.getAbstractFileByPath(file.path) instanceof
-					TFolder
-			)
-			.map((folderFile) => folderFile.path);
-
-		new Setting(containerEl)
-			.setName("File path")
-			.setDesc("Select the folder where you want to save your highlights")
-			.addDropdown((dropdown) => {
-				dropdown.addOptions({
-					...folders.reduce(
-						(acc, cur) => ({ ...acc, [cur]: cur }),
-						{}
-					),
-				});
-				dropdown.setValue(this.plugin.settings.path);
-				dropdown.onChange(async (value) => {
-					this.plugin.settings.path = value;
-					await this.plugin.saveSettings();
-				});
-			});
-		
-	}
-}
-
-
 class FilePickerModal extends Modal {
 	callback: (value: File) => void; // Add this line
 
@@ -205,3 +160,47 @@ class FilePickerModal extends Modal {
 		contentEl.empty();
 	}
 }
+
+class KindleHighlightsSettingsTab extends PluginSettingTab {
+	plugin: KindleHighlightsPlugin;
+
+	constructor(app: App, plugin: KindleHighlightsPlugin) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
+
+	display():void {
+		const { containerEl } = this;
+		containerEl.empty();
+		containerEl.createEl("h1", { text: "Kindle Highlights Settings" });
+
+		const folders: string[] = this.app.vault
+			.getAllLoadedFiles()
+			.filter(
+				(file) =>
+					this.app.vault.getAbstractFileByPath(file.path) instanceof
+					TFolder
+			)
+			.map((folderFile) => folderFile.path);
+
+		new Setting(containerEl)
+			.setName("File path")
+			.setDesc("Select the folder where you want to save your highlights")
+			.addDropdown((dropdown) => {
+				dropdown.addOptions({
+					...folders.reduce(
+						(acc, cur) => ({ ...acc, [cur]: cur }),
+						{}
+					),
+				});
+				dropdown.setValue(this.plugin.settings.path);
+				dropdown.onChange(async (value) => {
+					this.plugin.settings.path = value;
+					await this.plugin.saveSettings();
+				});
+			});
+		
+	}
+}
+
+
