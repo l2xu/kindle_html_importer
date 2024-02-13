@@ -18,7 +18,7 @@ export default class KindleHighlightsPlugin extends Plugin {
 		await this.loadSettings();
 
 		this.addCommand({
-			id: "display-modal",
+			id: "openKindleHighlightsModal",
 			name: "Import Highlights from HTML file",
 			callback: () => {
 				new FilePickerModal(this.app, (value) => {
@@ -172,13 +172,12 @@ class KindleHighlightsSettingsTab extends PluginSettingTab {
 	display():void {
 		const { containerEl } = this;
 		containerEl.empty();
-		containerEl.createEl("h1", { text: "Kindle Highlights Settings" });
 
 		const folders: string[] = this.app.vault
 			.getAllLoadedFiles()
 			.filter(
 				(file) =>
-					this.app.vault.getAbstractFileByPath(file.path) instanceof
+					file instanceof
 					TFolder
 			)
 			.map((folderFile) => folderFile.path);

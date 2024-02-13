@@ -3,7 +3,7 @@
 	"name": "Kindle Highlights Importer",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Imports the kindle highlights from the html file (you get from the kindle app) into a note in Obsidian.",
+	"description": "A simple way to import your Kindle highlights html file.",
 	"author": "MovingMillennial",
 	"authorUrl": "https://movingmillennial.de",
 	"isDesktopOnly": false
